@@ -91,8 +91,8 @@ window.SCENES = {
 
       // console e plantas ao lado da escada.
       // Não invade mais a faixa caminhável dos degraus.
-      [1160, 300, 105, 245],
-      [1160, 540, 105, 135],
+      [1170, 320, 80, 205],
+      [1170, 545, 80, 80],
 
       // paredes laterais da entrada inferior
       [0, 675, 610, 189],

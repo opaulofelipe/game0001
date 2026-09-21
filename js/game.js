@@ -13,8 +13,13 @@
 
   const keys = new Set();
   const images = new Map();
-  const playerFrames = { down: [], up: [], left: [], right: [] };
-  const WALK_SEQUENCE = [1, 0, 1, 2];
+  const playerSheets = { down: null, up: null, left: null, right: null };
+  const PLAYER_FRAME_COLS = 4;
+  const PLAYER_FRAME_ROWS = 2;
+  const PLAYER_FRAME_COUNT = 8;
+  const PLAYER_DRAW_HEIGHT = 160;
+  const IDLE_FRAME = 0;
+  const WALK_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7];
 
   let currentSceneId = 'exterior_fechado';
   let currentScene = null;
@@ -39,7 +44,7 @@
     maxSpeed: 168,
     acceleration: 1450,
     braking: 2200,
-    anim: 1,
+    anim: IDLE_FRAME,
     walkDistance: 0,
     frameDistance: 18
   };
@@ -47,7 +52,7 @@
   const imagePaths = new Set();
   Object.values(window.SCENES).forEach(scene => imagePaths.add(scene.image));
   ['down', 'up', 'left', 'right'].forEach(dir => {
-    for (let i = 0; i < 3; i++) imagePaths.add(`assets/player/${dir}_${i}.png`);
+    imagePaths.add(`assets/player/walk_${dir}.webp`);
   });
 
   function loadImage(src) {
@@ -66,9 +71,7 @@
     await Promise.all([...imagePaths].map(loadImage));
 
     ['down', 'up', 'left', 'right'].forEach(dir => {
-      for (let i = 0; i < 3; i++) {
-        playerFrames[dir][i] = images.get(`assets/player/${dir}_${i}.png`);
-      }
+      playerSheets[dir] = images.get(`assets/player/walk_${dir}.webp`);
     });
 
     ctx.imageSmoothingEnabled = true;
@@ -92,7 +95,7 @@
     player.vy = 0;
     player.dir = p.dir || 'down';
     player.lastAxis = player.dir === 'left' || player.dir === 'right' ? 'x' : 'y';
-    player.anim = 1;
+    player.anim = IDLE_FRAME;
     player.walkDistance = 0;
     player.moving = false;
 
@@ -246,7 +249,7 @@
       const phase = Math.floor(player.walkDistance / player.frameDistance) % WALK_SEQUENCE.length;
       player.anim = WALK_SEQUENCE[phase];
     } else {
-      player.anim = 1;
+      player.anim = IDLE_FRAME;
       if (!hasInput) player.walkDistance = 0;
     }
   }
@@ -348,7 +351,7 @@
       player.vx = 0;
       player.vy = 0;
       player.moving = false;
-      player.anim = 1;
+      player.anim = IDLE_FRAME;
     }
 
     if (interactQueued) {
@@ -362,17 +365,27 @@
     ctx.drawImage(bg, 0, 0, W, H);
   }
 
-  function drawPlayerShadow() {
-    const scale = currentScene.playerScale || 0.145;
-    const idle = playerFrames[player.dir][1];
-    if (!idle) return;
+  function getPlayerMetrics() {
+    const sheet = playerSheets[player.dir];
+    if (!sheet) return null;
 
-    const baseH = idle.height * scale;
-    const shadowW = Math.max(22, baseH * 0.24);
-    const shadowH = Math.max(7, baseH * 0.065);
+    const frameW = sheet.width / PLAYER_FRAME_COLS;
+    const frameH = sheet.height / PLAYER_FRAME_ROWS;
+    const h = currentScene.playerHeight || PLAYER_DRAW_HEIGHT;
+    const w = h * (frameW / frameH);
+
+    return { sheet, frameW, frameH, w, h };
+  }
+
+  function drawPlayerShadow() {
+    const metrics = getPlayerMetrics();
+    if (!metrics) return;
+
+    const shadowW = Math.max(24, metrics.w * 0.34);
+    const shadowH = Math.max(8, metrics.h * 0.055);
 
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.fillStyle = 'rgba(0,0,0,.20)';
     ctx.beginPath();
     ctx.ellipse(player.x, player.y + 1, shadowW, shadowH, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -380,19 +393,20 @@
   }
 
   function drawPlayer() {
-    const im = playerFrames[player.dir][player.anim];
-    const idle = playerFrames[player.dir][1];
-    if (!im || !idle) return;
+    const metrics = getPlayerMetrics();
+    if (!metrics) return;
 
-    const scale = currentScene.playerScale || 0.145;
-
-    // Todos os frames de uma direção usam exatamente a mesma caixa visual.
-    // Isso elimina o "pulo" de tamanho/posição entre imagens diferentes.
-    const h = idle.height * scale;
-    const w = idle.width * scale;
+    const frame = Math.max(0, Math.min(PLAYER_FRAME_COUNT - 1, player.anim));
+    const sx = (frame % PLAYER_FRAME_COLS) * metrics.frameW;
+    const sy = Math.floor(frame / PLAYER_FRAME_COLS) * metrics.frameH;
 
     drawPlayerShadow();
-    ctx.drawImage(im, player.x - w / 2, player.y - h, w, h);
+    ctx.drawImage(
+      metrics.sheet,
+      sx, sy, metrics.frameW, metrics.frameH,
+      player.x - metrics.w / 2, player.y - metrics.h,
+      metrics.w, metrics.h
+    );
   }
 
   function drawDebug() {
